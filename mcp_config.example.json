@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "devops-mcp-adapter": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "github:dsquintero/devops-mcp-adapter"
+      ],
+      "env": {
+        "AZURE_DEVOPS_ORG_URL": "https://your-devops-server.com/CollectionName",
+        "AZURE_DEVOPS_PAT": "YOUR_PERSONAL_ACCESS_TOKEN",
+        "AZURE_DEVOPS_PROJECT": "Your.Project.Name.Here"
+      }
+    }
+  }
+}
