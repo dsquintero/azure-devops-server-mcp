@@ -1,15 +1,16 @@
 # DevOps MCP Adapter 🚀
 
-Custom Model Context Protocol (MCP) server designed specifically to bridge AI Assistants (like Claude or Cursor) with **Azure DevOps Server (On-Premise)** deployments.
+Custom Model Context Protocol (MCP) server designed specifically to bridge AI Assistants (like Claude or Cursor) with **Azure DevOps Server (On-Premise)** and Azure DevOps Services deployments.
 
 Unlike the official `@azure-devops/mcp` server, this adapter bypasses automatic API discovery issues by interacting directly with the Azure DevOps REST API for specific, common operations.
 
 ## ✨ Features
 
 - **Zero Location-Discovery Errors:** Built for On-Premise compatibility.
-- **Full Hierarchy Support:** Create tasks entirely linked as children of User Stories or Features.
-- **Intelligent Querying (WIQL):** Fetch any item using WIQL syntax.
-- **Time Tracking:** Log completed hours and run validation constraints (e.g. check if 9 hours are logged daily).
+- **Dynamic API Versioning:** Choose the API version that matches your server (defaults to 7.1).
+- **Full Hierarchy Support:** Create and link tasks as children/parents/related items to User Stories or Features.
+- **Intelligent Querying (WIQL):** Fetch any item using WIQL syntax with optional specific column (`fields`) selection.
+- **Full CRUD:** Create, Read, Update, and Delete Work Items effectively using a normalized property structure.
 - **Multi-Project Support:** Agnostic to specific projects (dynamic switching).
 
 ---
@@ -28,13 +29,16 @@ You don't need to clone or run this manually. Just configure your AI Assistant (
       "args": ["-y", "github:dsquintero/devops-mcp-adapter"],
       "env": {
         "AZURE_DEVOPS_ORG_URL": "https://your-devops-server.com/CollectionName",
-        "AZURE_DEVOPS_PAT": "YOUR_PERSONAL_ACCESS_TOKEN",
-        "AZURE_DEVOPS_PROJECT": "Your.Project.Name.Here"
+        "AZURE_DEVOPS_PROJECT": "Your.Project.Name.Here",
+        "AZURE_DEVOPS_API_VERSION": "7.1",
+        "AZURE_DEVOPS_PAT": "YOUR_PERSONAL_ACCESS_TOKEN"
       }
     }
   }
 }
 ```
+
+> **Note:** All 4 environment variables (`ORG_URL`, `PROJECT`, `API_VERSION`, `PAT`) mentioned above are **required** to start the server.
 
 ### Requirements
 
@@ -45,11 +49,13 @@ You don't need to clone or run this manually. Just configure your AI Assistant (
 
 ## 🤖 Available AI Tools
 
-Once connected, your AI will have access to:
+Once connected, your AI will have access to the following operations:
 
-- `query_work_items`: Execute WIQL queries to find tasks, stories, or bugs.
-- `create_work_item`: Create any type of work item and assign it seamlessly.
+- `get_work_item`: Retrieve details of a specific Work Item by ID, optionally filtering by `fields`.
+- `query_work_items`: Execute WIQL queries to find tasks, stories, or bugs, selecting specific `fields` if needed.
+- `create_work_item`: Create any type of work item and assign it seamlessly (separates system and custom fields).
+- `update_work_item`: Update existing work items easily via standard properties or custom fields mappings.
+- `delete_work_item`: Delete an existing work item by ID.
 - `create_child_task`: Instantly create a Task and link it (as `Child`) to a parent User Story/Feature.
-- `link_work_items`: Attach an existing independent task to a broader parent item.
-- `log_hours`: Incrementally log your hours to the `Completed Work` field.
-- `validate_daily_hours`: Validates if a user has met the daily 9-hour work logging quota in a specific project.
+- `link_work_items`: Attach existing items to each other using `Child`, `Parent`, or `Related` relations.
+- `add_hours`: Incrementally add or log your hours to the `Completed Work` field.

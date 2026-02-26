@@ -27,13 +27,68 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
+        name: "get_work_item",
+        description: "Get details for a specific Work Item by ID.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "number", description: "The ID of the work item" },
+            project: { type: "string", description: "Project name (optional if AZURE_DEVOPS_PROJECT env var is set)" },
+            fields: { 
+              type: "array", 
+              items: { type: "string" }, 
+              description: "Optional list of specific field names to retrieve, e.g. ['System.Title', 'System.State']." 
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "update_work_item",
+        description: "Update an existing work item by providing fields to change.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "number", description: "The ID of the work item to update" },
+            title: { type: "string", description: "Title of the work item" },
+            assignedTo: { type: "string", description: "Email or name of the person" },
+            tags: { type: "string", description: "Comma separated tags, e.g. 'AI, Backend'" },
+            state: { type: "string", description: "State of the work item, e.g. 'Active', 'Closed', 'Resolved'" },
+            project: { type: "string", description: "Project name (optional if AZURE_DEVOPS_PROJECT env var is set)" },
+            customFields: {
+              type: "object",
+              description: "Optional key-value object for any other Azure DevOps fields. Key must be the full field reference name.",
+              additionalProperties: true
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "delete_work_item",
+        description: "Delete an existing work item.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "number", description: "The ID of the work item to delete" },
+            project: { type: "string", description: "Project name (optional if AZURE_DEVOPS_PROJECT env var is set)" }
+          },
+          required: ["id"]
+        }
+      },
+      {
         name: "query_work_items",
         description: "Run a WIQL query to fetch work items. Useful for getting user tasks.",
         inputSchema: {
           type: "object",
           properties: {
             query: { type: "string", description: "The WIQL query, e.g., SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.AssignedTo] = '@Me'" },
-            project: { type: "string", description: "Project name (optional if AZURE_DEVOPS_PROJECT env var is set)" }
+            project: { type: "string", description: "Project name (optional if AZURE_DEVOPS_PROJECT env var is set)" },
+            fields: { 
+              type: "array", 
+              items: { type: "string" }, 
+              description: "Optional list of specific field names to retrieve for the resulting items." 
+            }
           },
           required: ["query"]
         }
@@ -48,43 +103,39 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             title: { type: "string", description: "Title of the work item" },
             assignedTo: { type: "string", description: "Email or name of the person" },
             tags: { type: "string", description: "Comma separated tags, e.g. 'AI, Backend'" },
-            project: { type: "string", description: "Project name (optional if AZURE_DEVOPS_PROJECT env var is set)" }
+            project: { type: "string", description: "Project name (optional if AZURE_DEVOPS_PROJECT env var is set)" },
+            customFields: {
+              type: "object",
+              description: "Optional key-value object for any other Azure DevOps fields. Key must be the full field reference name, e.g. 'System.Description' or 'Microsoft.VSTS.Scheduling.OriginalEstimate'.",
+              additionalProperties: true
+            }
           },
           required: ["type", "title"]
         }
       },
       {
-        name: "log_hours",
-        description: "Log hours to a work item by adjusting its Completed Work field.",
+        name: "add_hours",
+        description: "Add or log hours to a work item by adjusting its Completed Work field.",
         inputSchema: {
           type: "object",
           properties: {
             workItemId: { type: "number", description: "The ID of the work item" },
-            hoursToAdd: { type: "number", description: "The number of hours to add/log" }
+            hoursToAdd: { type: "number", description: "The number of hours to add/log" },
+            project: { type: "string", description: "Project name (optional if AZURE_DEVOPS_PROJECT env var is set)" }
           },
           required: ["workItemId", "hoursToAdd"]
         }
       },
-      {
-        name: "validate_daily_hours",
-        description: "Validates if the user has logged 9 hours minimum for the given day in the configured project.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            userEmail: { type: "string", description: "The user email or name to query for today's tasks" },
-            project: { type: "string", description: "Project name (optional if AZURE_DEVOPS_PROJECT env var is set)" }
-          },
-          required: ["userEmail"]
-        }
-      },
+
       {
         name: "link_work_items",
-        description: "Link an existing work item to a parent (e.g. link a Task to a User Story).",
+        description: "Link an existing work item to another (e.g. Parent, Child, Related).",
         inputSchema: {
           type: "object",
           properties: {
-            parentId: { type: "number", description: "The ID of the parent (e.g. User Story/Feature)" },
-            childId: { type: "number", description: "The ID of the existing child (e.g. Task)" }
+            parentId: { type: "number", description: "The ID of the source or parent work item" },
+            childId: { type: "number", description: "The ID of the target or child work item" },
+            linkType: { type: "string", description: "The relationship type: 'Child', 'Parent', or 'Related'. Defaults to 'Child'." }
           },
           required: ["parentId", "childId"]
         }
@@ -99,7 +150,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             title: { type: "string", description: "Title of the new task" },
             assignedTo: { type: "string", description: "Email or name of the person" },
             tags: { type: "string", description: "Comma separated tags, e.g. 'AI, Backend'" },
-            project: { type: "string", description: "Project name (optional if AZURE_DEVOPS_PROJECT env var is set)" }
+            project: { type: "string", description: "Project name (optional if AZURE_DEVOPS_PROJECT env var is set)" },
+            customFields: {
+              type: "object",
+              description: "Optional key-value object for any other Azure DevOps fields. Key must be the full field reference name, e.g. 'System.Description' or 'Microsoft.VSTS.Scheduling.OriginalEstimate'.",
+              additionalProperties: true
+            }
           },
           required: ["parentId", "title"]
         }
@@ -112,6 +168,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const args = request.params.arguments || {};
+
+    if (request.params.name === "get_work_item") {
+      const result = await api.getWorkItem(args.id, args.project, args.fields);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+
+    if (request.params.name === "update_work_item") {
+      const systemFields = {
+        Title: args.title,
+        AssignedTo: args.assignedTo,
+        Tags: args.tags,
+        State: args.state
+      };
+      const result = await api.updateWorkItemFields(args.id, systemFields, args.customFields, args.project);
+      return { content: [{ type: "text", text: `Item updated successfully! ID: ${result.id}\nURL: ${result._links?.html?.href}` }] };
+    }
+
+    if (request.params.name === "delete_work_item") {
+      await api.deleteWorkItem(args.id, args.project);
+      return { content: [{ type: "text", text: `Item ${args.id} deleted successfully.` }] };
+    }
     
     if (request.params.name === "query_work_items") {
       const result = await api.runWiqlQuery(args.query, args.project);
@@ -119,74 +196,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // If the query returns work items, fetch the rich details to be useful
       if (result && result.workItems && result.workItems.length > 0) {
           const ids = result.workItems.map(w => w.id).slice(0, 50); // Get top 50 to avoid overloading
-          const details = await api.getWorkItemsDetails(ids);
+          const details = await api.listWorkItems(ids, args.fields);
           return { content: [{ type: "text", text: JSON.stringify(details, null, 2) }] };
       }
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
     
     if (request.params.name === "create_work_item") {
-      const result = await api.createWorkItem(args.type, args.title, args.assignedTo, args.tags, args.project);
+      const systemFields = {
+        Title: args.title,
+        AssignedTo: args.assignedTo,
+        Tags: args.tags
+      };
+      const result = await api.createWorkItem(args.type, systemFields, args.customFields, args.project);
       return { content: [{ type: "text", text: `Item created successfully! ID: ${result.id}\nURL: ${result._links?.html?.href}` }] };
     }
     
-    if (request.params.name === "log_hours") {
-      // 1. Fetch current item state to get current hours
-      const itemDetails = await api.getWorkItemsDetails([args.workItemId]);
-      if (!itemDetails || itemDetails.length === 0) {
-          throw new Error("Work Item not found");
-      }
-      const item = itemDetails[0];
-      const currentHours = item.fields["Microsoft.VSTS.Scheduling.CompletedWork"] || 0;
-      const newHours = currentHours + args.hoursToAdd;
-      
-      // 2. Patch the hours
-      const patch = [{
-          "op": "add",
-          "path": "/fields/Microsoft.VSTS.Scheduling.CompletedWork",
-          "value": newHours
-      }];
-      
-      const updateResult = await api.updateWorkItem(args.workItemId, patch);
-      return { content: [{ type: "text", text: `Hours logged successfully. Old hours: ${currentHours}. New total Completed Work: ${newHours}.` }] };
-    }
-    
-    if (request.params.name === "validate_daily_hours") {
-      const items = await api.getCurrentUserDailyTasks(args.userEmail, args.project);
-      let totalHoursToday = 0;
-      
-      items.forEach(item => {
-          totalHoursToday += (item.fields["Microsoft.VSTS.Scheduling.CompletedWork"] || 0);
-      });
-      
-      const requiredHours = 9;
-      const isCompliant = totalHoursToday >= requiredHours;
-      const difference = Math.abs(requiredHours - totalHoursToday);
-      
-      let report = `Daily Hours Report for ${args.userEmail}\n`;
-      report += `Total Scheduled Completed Work for tasks modified today: ${totalHoursToday} hrs\n`;
-      report += `Target: ${requiredHours} hrs\n`;
-      report += `Status: ${isCompliant ? 'COMPLIANT ✅' : 'DEFICIT ❌'}\n`;
-      
-      if (!isCompliant) {
-          report += `You need to log ${difference} more hours to reach the daily 9-hour goal.\n\n`;
-      }
-      
-      report += "Tasks analyzed:\n";
-      items.forEach(item => {
-          report += `- [${item.fields["System.WorkItemType"]}] ID: ${item.id} - ${item.fields["System.Title"]} (${item.fields["Microsoft.VSTS.Scheduling.CompletedWork"] || 0} hrs)\n`;
-      });
-      
-      return { content: [{ type: "text", text: report }] };
+    if (request.params.name === "add_hours") {
+      const result = await api.addHours(args.workItemId, args.hoursToAdd, args.project);
+      return { content: [{ type: "text", text: `Hours logged successfully. Old hours: ${result.currentHours}. New total Completed Work: ${result.newHours}.` }] };
     }
 
+
     if (request.params.name === "link_work_items") {
-      const result = await api.linkWorkItems(args.parentId, args.childId, "Child");
-      return { content: [{ type: "text", text: `Successfully linked Task ${args.childId} as a Child to Parent ${args.parentId}.\nURL: ${result._links?.html?.href}` }] };
+      const linkType = args.linkType || "Child";
+      const result = await api.linkWorkItems(args.parentId, args.childId, linkType);
+      return { content: [{ type: "text", text: `Successfully linked Item ${args.childId} as ${linkType} to Item ${args.parentId}.\nURL: ${result._links?.html?.href}` }] };
     }
 
     if (request.params.name === "create_child_task") {
-      const result = await api.createChildTask(args.parentId, args.title, args.assignedTo, args.tags, args.project);
+      const systemFields = {
+        Title: args.title,
+        AssignedTo: args.assignedTo,
+        Tags: args.tags
+      };
+      const result = await api.createChildTask(args.parentId, systemFields, args.customFields, args.project);
       return { content: [{ type: "text", text: `Successfully created Task ${result.id} and linked it as a Child to Parent ${args.parentId}.\nURL: ${result._links?.html?.href}` }] };
     }
 
