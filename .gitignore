@@ -1,4 +1,4 @@
 node_modules/
 .env
 mcp_config.json
-test*.js
+/test*.js

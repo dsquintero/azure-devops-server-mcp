@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "devops-mcp-adapter": {
+      "type": "local",
+      "command": ["npx", "-y", "github:dsquintero/devops-mcp-adapter"],
+      "enabled": true,
+      "timeout": 20000,
+      "environment": {
+        "AZURE_DEVOPS_ORG_URL": "https://your-devops-server.com/CollectionName",
+        "AZURE_DEVOPS_API_VERSION": "6.0",
+        "AZURE_DEVOPS_PAT": "{env:AZURE_DEVOPS_PAT}"
+      }
+    }
+  }
+}
