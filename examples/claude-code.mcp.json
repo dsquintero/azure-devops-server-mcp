@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "azure-devops-server-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "github:dsquintero/azure-devops-server-mcp"],
+      "env": {
+        "AZURE_DEVOPS_ORG_URL": "https://your-devops-server.com/CollectionName",
+        "AZURE_DEVOPS_PAT": "${AZURE_DEVOPS_PAT}"
+      }
+    }
+  }
+}

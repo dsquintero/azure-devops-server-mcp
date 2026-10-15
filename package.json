@@ -1,16 +1,39 @@
 {
-  "name": "devops-mcp-adapter",
-  "version": "1.0.0",
-  "description": "Custom MCP Bridge for Azure DevOps Server (On-Premise)",
+  "name": "azure-devops-server-mcp",
+  "version": "2.0.0",
+  "description": "MCP server for Azure DevOps Server (on-premises) and Azure DevOps Services: work items, sprints and test plans across every project your PAT can access",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "azure-devops",
+    "azure-devops-server",
+    "on-premises",
+    "tfs",
+    "work-items",
+    "test-plans"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsquintero/azure-devops-server-mcp.git"
+  },
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node --test test/"
   },
   "bin": {
-    "devops-mcp-adapter": "./index.js"
+    "azure-devops-server-mcp": "./index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.5.0",
-    "axios": "^1.6.7"
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "axios": "^1.6.7",
+    "zod": "^3.25.76"
+  },
+  "files": [
+    "index.js",
+    "src/"
+  ],
+  "engines": {
+    "node": ">=18"
   }
 }

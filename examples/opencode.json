@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "azure-devops-server-mcp": {
+      "type": "local",
+      "command": ["npx", "-y", "github:dsquintero/azure-devops-server-mcp"],
+      "enabled": true,
+      "timeout": 20000,
+      "environment": {
+        "AZURE_DEVOPS_ORG_URL": "https://your-devops-server.com/CollectionName",
+        "AZURE_DEVOPS_PAT": "{env:AZURE_DEVOPS_PAT}"
+      }
+    }
+  }
+}
