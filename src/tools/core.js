@@ -8,7 +8,7 @@ function configureCoreTools(ctx) {
   defineTool(ctx, {
     name: "core",
     description:
-      "Discover what the PAT can access across the collection. Actions: whoami (authenticated user), list_projects (every project the PAT can see), list_teams (teams of a project, or with mine=true the teams you belong to across ALL projects), search_identities (find users by name/email to use in AssignedTo or WIQL).",
+      "Discover what the PAT can access across the collection. Actions: whoami (authenticated user), list_projects (every project the PAT can see), list_teams (teams of a project, or with mine=true the teams you belong to across ALL projects), search_identities (find users by the beginning of their name, account or e-mail, to use in Assigned To or WIQL).",
     annotations: READ_ONLY,
     schema: {
       action: z.enum(["whoami", "list_projects", "list_teams", "search_identities"]),
@@ -20,7 +20,7 @@ function configureCoreTools(ctx) {
     },
     handlers: {
       whoami: async () => {
-        const data = await client.get("/_apis/connectionData");
+        const data = await client.get("/_apis/connectionData", { preview: PREVIEW.connectionData });
         const user = data.authenticatedUser || {};
         return {
           id: user.id,
@@ -29,6 +29,7 @@ function configureCoreTools(ctx) {
           mail: user.properties?.Mail?.$value,
           collectionUrl: client.baseUrl,
           apiVersion: client.apiVersion,
+          apiVersionSource: client.apiVersionSource,
           defaultProject: client.defaultProject,
         };
       },
@@ -59,10 +60,35 @@ function configureCoreTools(ctx) {
 
       search_identities: async (args) => {
         need(args, "search_identities", "search");
+        const top = args.top || 25;
+        // The identity picker (used by the web UI) matches by prefix of names and accounts.
+        const picker = await client.post(
+          "/_apis/IdentityPicker/Identities",
+          {
+            query: args.search,
+            identityTypes: ["user", "group"],
+            operationScopes: ["ims", "source"],
+            properties: ["DisplayName", "Mail", "SamAccountName", "ScopeName", "Active"],
+            // The server requires MinResults < MaxResults.
+            options: { MinResults: 1, MaxResults: Math.max(top, 2) },
+          },
+          { preview: PREVIEW.identityPicker }
+        );
+        const found = (picker.results?.[0]?.identities || []).map((i) => ({
+          id: i.localId || undefined,
+          displayName: i.displayName,
+          account: i.samAccountName ? (i.scopeName ? `${i.scopeName}\\${i.samAccountName}` : i.samAccountName) : undefined,
+          mail: i.mail || undefined,
+          isGroup: i.entityType === "Group" || undefined,
+          active: i.active === false ? false : undefined,
+        }));
+        if (found.length) return found.slice(0, top);
+
+        // Fallback: exact match on display name, account or e-mail.
         const data = await client.get("/_apis/identities", {
           query: { searchFilter: "General", filterValue: args.search, queryMembership: "None" },
         });
-        return (data.value || []).slice(0, args.top || 25).map((i) => ({
+        return (data.value || []).slice(0, top).map((i) => ({
           id: i.id,
           displayName: i.providerDisplayName || i.customDisplayName,
           account: i.properties?.Account?.$value,

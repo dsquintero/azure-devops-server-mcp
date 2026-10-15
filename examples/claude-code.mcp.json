@@ -6,7 +6,6 @@
       "args": ["-y", "github:dsquintero/devops-mcp-adapter"],
       "env": {
         "AZURE_DEVOPS_ORG_URL": "https://your-devops-server.com/CollectionName",
-        "AZURE_DEVOPS_API_VERSION": "6.0",
         "AZURE_DEVOPS_PAT": "${AZURE_DEVOPS_PAT}"
       }
     }

@@ -35,7 +35,7 @@ async function main() {
 
   await server.connect(new StdioServerTransport());
   console.error(
-    `[devops-mcp-adapter] v${version} connected to ${config.orgUrl} (api ${config.apiVersion}, domains: ${[...new Set(["core", ...config.domains])].join(", ")}${config.readOnly ? ", read-only" : ""})`
+    `[devops-mcp-adapter] v${version} connected to ${config.orgUrl} (api ${config.apiVersion || "auto"}, domains: ${[...new Set(["core", ...config.domains])].join(", ")}${config.readOnly ? ", read-only" : ""})`
   );
 }
 

@@ -5,7 +5,7 @@ const ALL_DOMAINS = ["core", "work", "work-items", "test-plans"];
  *
  * Required: AZURE_DEVOPS_ORG_URL, AZURE_DEVOPS_PAT
  * Optional: AZURE_DEVOPS_PROJECT (default project, only a fallback),
- *           AZURE_DEVOPS_API_VERSION (default "6.0"),
+ *           AZURE_DEVOPS_API_VERSION (default: detected from the server),
  *           AZURE_DEVOPS_READONLY ("true" registers only read tools),
  *           AZURE_DEVOPS_DOMAINS (comma separated subset of ALL_DOMAINS),
  *           AZURE_DEVOPS_TIMEOUT_MS (default 30000)
@@ -21,9 +21,11 @@ function loadConfig(env = process.env) {
   const pat = (env.AZURE_DEVOPS_PAT || "").trim();
   if (!pat) errors.push("AZURE_DEVOPS_PAT is required");
 
-  const apiVersion = (env.AZURE_DEVOPS_API_VERSION || "6.0").trim();
-  if (!/^\d+\.\d+$/.test(apiVersion)) {
-    errors.push(`AZURE_DEVOPS_API_VERSION must look like "6.0" or "7.1" (got "${apiVersion}")`);
+  // Empty or "auto": detected from the server on the first request.
+  let apiVersion = (env.AZURE_DEVOPS_API_VERSION || "").trim();
+  if (apiVersion.toLowerCase() === "auto") apiVersion = "";
+  if (apiVersion && !/^\d+\.\d+$/.test(apiVersion)) {
+    errors.push(`AZURE_DEVOPS_API_VERSION must look like "6.0" or "7.1", or be "auto" (got "${apiVersion}")`);
   }
 
   let domains = ALL_DOMAINS;
@@ -40,7 +42,7 @@ function loadConfig(env = process.env) {
   return {
     orgUrl,
     pat,
-    apiVersion,
+    apiVersion: apiVersion || null,
     defaultProject: (env.AZURE_DEVOPS_PROJECT || "").trim() || null,
     readOnly: /^(1|true|yes)$/i.test(env.AZURE_DEVOPS_READONLY || ""),
     domains,

@@ -54,6 +54,8 @@ function summarize(item, client) {
 
 function configureWorkItemTools(ctx) {
   const { client } = ctx;
+  // Expanding allowed values is slow on the server (seconds) and types rarely change during a session.
+  const typeCache = new Map();
 
   /** Fetches work items for a list of IDs as compact rows, keeping the original order. */
   async function rowsFor(ids, fields) {
@@ -94,7 +96,7 @@ function configureWorkItemTools(ctx) {
   defineTool(ctx, {
     name: "wit_work_item",
     description:
-      "Read work items in any project the PAT can access. Actions: get (one item with all fields and relations), get_batch (several IDs), my (items assigned to or created by me, optionally across all projects), list_for_iteration (items of a team sprint; iterationId defaults to the current sprint), list_comments, list_history (who changed what and when), list_types (work item types of a project), get_type (states, fields with reference names, required flags and allowed values of a type - use it before creating/updating).",
+      "Read work items in any project the PAT can access. Actions: get (one item with all fields and relations), get_batch (several IDs), my (items assigned to or created by me, optionally across all projects), list_for_iteration (items of a team sprint; iterationId defaults to the current sprint), list_comments, list_history (who changed what and when), list_types (work item types of a project), get_type (states, fields with reference names, allowed values and requiredOnCreate - the fields the process rules demand when creating; use it before creating).",
     annotations: READ_ONLY,
     schema: {
       action: z.enum(["get", "get_batch", "my", "list_for_iteration", "list_comments", "list_history", "list_types", "get_type"]),
@@ -201,15 +203,26 @@ function configureWorkItemTools(ctx) {
       get_type: async (args) => {
         need(args, "get_type", "workItemType");
         const p = client.requireProject(args.project);
+        const cacheKey = `${p}|${args.workItemType}`.toLowerCase();
+        if (typeCache.has(cacheKey)) return typeCache.get(cacheKey);
         const base = `${client.projectPath(p)}/_apis/wit/workitemtypes/${enc(args.workItemType)}`;
         const [fields, states, catalog] = await Promise.all([
           client.get(`${base}/fields`, { query: { $expand: "allowedValues" } }),
-          client.get(`${base}/states`),
+          client.get(`${base}/states`, { preview: PREVIEW.workItemTypeStates }),
           client.getFieldCatalog(),
         ]);
-        return {
+        // Process rules (e.g. "Description required on create") are not part of the type metadata:
+        // probe them with a create that only validates.
+        const requiredByRules = new Map();
+        try {
+          await client.createWorkItem(p, args.workItemType, [{ op: "add", path: "/fields/System.Title", value: "validation probe" }], { validateOnly: true });
+        } catch (error) {
+          for (const e of error.ruleErrors || []) requiredByRules.set(e.fieldReferenceName, e.fieldStatusFlags);
+        }
+        const type = {
           name: args.workItemType,
           project: p,
+          requiredOnCreate: ["System.Title", ...requiredByRules.keys()],
           states: (states.value || []).map((s) => ({ name: s.name, category: s.category })),
           fields: (fields.value || []).map((f) => {
             const info = catalog.byKey.get(f.referenceName.toLowerCase());
@@ -217,13 +230,15 @@ function configureWorkItemTools(ctx) {
               referenceName: f.referenceName,
               name: f.name,
               type: info?.type,
-              required: f.alwaysRequired || undefined,
+              required: f.alwaysRequired || requiredByRules.has(f.referenceName) || undefined,
               readOnly: info?.readOnly || undefined,
               defaultValue: f.defaultValue ?? undefined,
               allowedValues: f.allowedValues?.length ? f.allowedValues : undefined,
             };
           }),
         };
+        typeCache.set(cacheKey, type);
+        return type;
       },
     },
   });
@@ -306,6 +321,7 @@ function configureWorkItemTools(ctx) {
         .optional()
         .describe("update: advanced raw JSON-PATCH operations appended after 'fields' (e.g. relations)."),
       expectedRev: z.number().int().optional().describe("update: fail if the work item revision changed since you read it (optimistic concurrency)."),
+      validateOnly: z.boolean().optional().describe("create/update: only validate against the process rules, nothing is saved. Errors list every invalid field."),
       items: z
         .array(z.object({ id: z.number().int().optional(), fields: fieldsMap }))
         .max(50)
@@ -325,7 +341,8 @@ function configureWorkItemTools(ctx) {
           if (args.inheritPaths !== false) ops.push(...inherited.ops);
           ops.push({ op: "add", path: "/relations/-", value: { rel: LINK_TYPES.parent, url: client.workItemApiUrl(args.parentId) } });
         }
-        const created = await client.createWorkItem(client.requireProject(project), args.workItemType, ops);
+        const created = await client.createWorkItem(client.requireProject(project), args.workItemType, ops, { validateOnly: args.validateOnly });
+        if (args.validateOnly) return "Valid: the work item can be created with these fields (nothing was saved).";
         return { created: summarize(created, client), parentId: args.parentId };
       },
 
@@ -336,7 +353,8 @@ function configureWorkItemTools(ctx) {
         ops.push(...(await client.buildFieldOperations(args.fields, { allowRemove: true })));
         ops.push(...(args.operations || []));
         if (ops.length === (args.expectedRev !== undefined ? 1 : 0)) throw new DevOpsError("Nothing to update: pass 'fields' or 'operations'.");
-        const updated = await client.updateWorkItem(args.id, ops);
+        const updated = await client.updateWorkItem(args.id, ops, { validateOnly: args.validateOnly });
+        if (args.validateOnly) return "Valid: the update can be applied (nothing was saved).";
         return { updated: summarize(updated, client) };
       },
 
@@ -398,7 +416,14 @@ function configureWorkItemTools(ctx) {
 
       delete: async (args) => {
         need(args, "delete", "id");
-        await client.delete(`/_apis/wit/workitems/${args.id}`);
+        try {
+          await client.delete(`/_apis/wit/workitems/${args.id}`);
+        } catch (error) {
+          if (/test work items/i.test(error.message)) {
+            throw new DevOpsError(`Work item ${args.id} is a test artifact (Test Case / Test Plan / Test Suite). Azure DevOps does not allow deleting it with the work item API and deleting it is permanent: remove it from Test Plans in the web UI.`, error.status);
+          }
+          throw error;
+        }
         return `Work item ${args.id} moved to the recycle bin (it can be restored from the web UI).`;
       },
     },

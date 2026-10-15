@@ -2,12 +2,19 @@ const axios = require("axios");
 
 const enc = encodeURIComponent;
 
+/** Used when the server version cannot be detected. */
+const FALLBACK_API_VERSION = "6.0";
+
 /**
- * Resource versions that are still "preview" in the 6.0 REST API.
+ * Resources that are still "preview" in the 6.0 REST API.
  * The number is the resource revision appended as `<base>-preview.<n>`.
  * Azure DevOps accepts older preview revisions on newer servers, so these keep working on 7.x.
+ * Any other resource that turns out to be preview is retried automatically with `-preview`.
  */
 const PREVIEW = {
+  connectionData: 1,
+  identityPicker: 1,
+  workItemTypeStates: 1,
   comments: 3,
   teamsMine: 3,
   iterationWorkItems: 1,
@@ -33,7 +40,9 @@ class DevOpsClient {
   constructor(config) {
     this.config = config;
     this.baseUrl = config.orgUrl;
-    this.apiVersion = config.apiVersion;
+    // Fixed by configuration, or detected from the server on the first request.
+    this.apiVersion = config.apiVersion || null;
+    this.apiVersionSource = config.apiVersion ? "configured" : null;
     this.defaultProject = config.defaultProject;
     this.fieldCatalog = null;
 
@@ -55,6 +64,39 @@ class DevOpsClient {
   }
 
   /**
+   * Resolves the api-version once: the configured one, or the highest *released* (non-preview)
+   * version the server reports through its location service (OPTIONS /_apis/<area>).
+   * Azure DevOps Server 2020 → 6.0, Server 2022 → 7.0, Azure DevOps Services → 7.1.
+   */
+  async ensureApiVersion() {
+    if (this.apiVersion) return this.apiVersion;
+    if (!this.detecting) {
+      this.detecting = this.detectApiVersion().then((detected) => {
+        this.apiVersion = detected.version;
+        this.apiVersionSource = detected.source;
+        console.error(`[devops-mcp-adapter] api-version ${detected.version} (${detected.source})`);
+        return detected.version;
+      });
+    }
+    return this.detecting;
+  }
+
+  async detectApiVersion() {
+    try {
+      const response = await this.http.request({ method: "OPTIONS", url: "/_apis/wit" });
+      const released = (response.data?.value || [])
+        .map((resource) => resource.releasedVersion)
+        .filter((v) => v && v !== "0.0")
+        .sort(compareVersions);
+      if (released.length) return { version: released[released.length - 1], source: "detected from the server" };
+    } catch (error) {
+      // An invalid PAT or URL fails here too; the real request will report it with a clear message.
+      if (error.response?.status === 401 || error.response?.status === 203) throw toDevOpsError(error, "OPTIONS", "/_apis/wit");
+    }
+    return { version: FALLBACK_API_VERSION, source: "detection failed, using fallback" };
+  }
+
+  /**
    * Performs a request and returns `{ data, headers }`.
    * @param {string} method - HTTP verb.
    * @param {string} path - Path relative to the collection URL (already encoded).
@@ -65,19 +107,31 @@ class DevOpsClient {
    * @param {boolean} [options.patch] - Send the body as application/json-patch+json.
    */
   async request(method, path, { query = {}, body, preview, patch = false } = {}) {
+    await this.ensureApiVersion();
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== null && value !== "") params.append(key, String(value));
     }
-    params.set("api-version", this.version(preview));
 
-    try {
-      const response = await this.http.request({
+    const send = (apiVersion) => {
+      params.set("api-version", apiVersion);
+      return this.http.request({
         method,
         url: `${path}?${params.toString()}`,
         data: body,
         headers: body !== undefined ? { "Content-Type": patch ? "application/json-patch+json" : "application/json" } : undefined,
       });
+    };
+
+    try {
+      let response;
+      try {
+        response = await send(this.version(preview));
+      } catch (error) {
+        // The resource is still preview in this server version: retry once with "-preview".
+        if (preview || error.response?.data?.typeKey !== "VssInvalidPreviewVersionException") throw error;
+        response = await send(`${this.apiVersion}-preview`);
+      }
       return { data: response.data, headers: response.headers };
     } catch (error) {
       throw toDevOpsError(error, method, path);
@@ -201,7 +255,9 @@ class DevOpsClient {
    */
   async getWorkItems(ids, { fields, expand } = {}) {
     const unique = [...new Set(ids.map(Number))].filter(Boolean);
-    const resolvedFields = fields && fields.length ? await Promise.all(fields.map((f) => this.resolveFieldName(f))) : undefined;
+    let resolvedFields = fields && fields.length ? await Promise.all(fields.map((f) => this.resolveFieldName(f))) : undefined;
+    // The project is needed to build the web URL of each item.
+    if (resolvedFields && !resolvedFields.includes("System.TeamProject")) resolvedFields = [...resolvedFields, "System.TeamProject"];
     const result = [];
     for (let i = 0; i < unique.length; i += 200) {
       const body = { ids: unique.slice(i, i + 200), errorPolicy: "Omit" };
@@ -228,12 +284,18 @@ class DevOpsClient {
     return item.fields["System.TeamProject"];
   }
 
-  async createWorkItem(project, type, operations) {
-    return this.post(`${this.projectPath(project)}/_apis/wit/workitems/$${enc(type)}`, operations, { patch: true });
+  async createWorkItem(project, type, operations, { validateOnly } = {}) {
+    return this.post(`${this.projectPath(project)}/_apis/wit/workitems/$${enc(type)}`, operations, {
+      patch: true,
+      query: { validateOnly: validateOnly ? "true" : undefined },
+    });
   }
 
-  async updateWorkItem(id, operations) {
-    return this.patch(`/_apis/wit/workitems/${id}`, operations, { patch: true });
+  async updateWorkItem(id, operations, { validateOnly } = {}) {
+    return this.patch(`/_apis/wit/workitems/${id}`, operations, {
+      patch: true,
+      query: { validateOnly: validateOnly ? "true" : undefined },
+    });
   }
 
   /** Runs WIQL at team, project or collection level (collection level = every project the PAT can see). */
@@ -241,6 +303,12 @@ class DevOpsClient {
     const prefix = project ? this.teamPath(project, team) : "";
     return this.post(`${prefix}/_apis/wit/wiql`, { query: wiql }, { query: { $top: top } });
   }
+}
+
+function compareVersions(a, b) {
+  const [aMajor, aMinor = 0] = a.split(".").map(Number);
+  const [bMajor, bMinor = 0] = b.split(".").map(Number);
+  return aMajor - bMajor || aMinor - bMinor;
 }
 
 function toDevOpsError(error, method, path) {
@@ -254,9 +322,17 @@ function toDevOpsError(error, method, path) {
   else if (status === 404) hint = " Resource not found: check the project/team names and IDs.";
   else if (!status && error.code) hint = ` Network error (${error.code}). Check AZURE_DEVOPS_ORG_URL and connectivity (VPN / certificates: NODE_EXTRA_CA_CERTS).`;
 
+  // Work item rule errors only name the first field in the message; list all of them.
+  const ruleErrors = data?.customProperties?.RuleValidationErrors;
+  if (Array.isArray(ruleErrors) && ruleErrors.length) {
+    hint += ` Fields with errors: ${ruleErrors.map((e) => `${e.fieldReferenceName} (${e.fieldStatusFlags})`).join("; ")}.`;
+  }
+
   const where = `${method} ${path.split("?")[0]}`;
   const message = serverMessage || error.message;
-  return new DevOpsError(`${status ? `[HTTP ${status}] ` : ""}${message}.${hint} (${where})`, status);
+  const error_ = new DevOpsError(`${status ? `[HTTP ${status}] ` : ""}${message}${hint} (${where})`, status);
+  error_.ruleErrors = ruleErrors;
+  return error_;
 }
 
-module.exports = { DevOpsClient, DevOpsError, PREVIEW, enc };
+module.exports = { DevOpsClient, DevOpsError, PREVIEW, FALLBACK_API_VERSION, enc };
