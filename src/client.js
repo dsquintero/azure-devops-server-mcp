@@ -74,7 +74,7 @@ class DevOpsClient {
       this.detecting = this.detectApiVersion().then((detected) => {
         this.apiVersion = detected.version;
         this.apiVersionSource = detected.source;
-        console.error(`[devops-mcp-adapter] api-version ${detected.version} (${detected.source})`);
+        console.error(`[azure-devops-server-mcp] api-version ${detected.version} (${detected.source})`);
         return detected.version;
       });
     }

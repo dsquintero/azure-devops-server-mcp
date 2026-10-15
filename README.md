@@ -1,4 +1,6 @@
-# DevOps MCP Adapter 🚀
+# Azure DevOps Server MCP 🚀
+
+> Proyecto comunitario, **no oficial**: no está afiliado ni respaldado por Microsoft. Azure DevOps es una marca de Microsoft.
 
 Servidor MCP (Model Context Protocol) que conecta asistentes de IA (Claude Code, OpenCode, Cursor, VS Code Copilot…) con **Azure DevOps Server (on-premises)** —y también con Azure DevOps Services— a través de su API REST.
 
@@ -50,22 +52,22 @@ Después de definirla, reinicia la terminal (y el cliente de IA).
 **Opción A — por comando, disponible en todos tus proyectos (recomendada):**
 
 ```bash
-claude mcp add --env AZURE_DEVOPS_ORG_URL=https://your-devops-server.com/CollectionName --env AZURE_DEVOPS_PAT=$AZURE_DEVOPS_PAT --scope user --transport stdio devops-mcp-adapter -- npx -y github:dsquintero/devops-mcp-adapter
+claude mcp add --env AZURE_DEVOPS_ORG_URL=https://your-devops-server.com/CollectionName --env AZURE_DEVOPS_PAT=$AZURE_DEVOPS_PAT --scope user --transport stdio azure-devops-server-mcp -- npx -y github:dsquintero/azure-devops-server-mcp
 ```
 
 - `--scope user` lo guarda en `~/.claude.json` para todos tus proyectos; usa `--scope local` (por defecto) para solo el proyecto actual.
 - Todo lo que va después de `--` es el comando del servidor.
-- En Windows usa `-- cmd /c npx -y github:dsquintero/devops-mcp-adapter`.
+- En Windows usa `-- cmd /c npx -y github:dsquintero/azure-devops-server-mcp`.
 
 **Opción B — compartida con el equipo desde el repositorio (`.mcp.json` en la raíz del proyecto):**
 
 ```json
 {
   "mcpServers": {
-    "devops-mcp-adapter": {
+    "azure-devops-server-mcp": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "github:dsquintero/devops-mcp-adapter"],
+      "args": ["-y", "github:dsquintero/azure-devops-server-mcp"],
       "env": {
         "AZURE_DEVOPS_ORG_URL": "https://your-devops-server.com/CollectionName",
         "AZURE_DEVOPS_PAT": "${AZURE_DEVOPS_PAT}"
@@ -77,7 +79,7 @@ claude mcp add --env AZURE_DEVOPS_ORG_URL=https://your-devops-server.com/Collect
 
 Claude Code reemplaza `${AZURE_DEVOPS_PAT}` con la variable de entorno de cada persona, así que el archivo se puede subir a git sin exponer tokens. Cada usuario aprueba el servidor del proyecto la primera vez.
 
-**Verificar:** ejecuta `claude mcp list` (debe aparecer `devops-mcp-adapter: ✓ Connected`) o escribe `/mcp` dentro de una sesión. Luego pregunta *"¿quién soy en Azure DevOps?"*: la IA llamará a `core` → `whoami`.
+**Verificar:** ejecuta `claude mcp list` (debe aparecer `azure-devops-server-mcp: ✓ Connected`) o escribe `/mcp` dentro de una sesión. Luego pregunta *"¿quién soy en Azure DevOps?"*: la IA llamará a `core` → `whoami`.
 
 #### OpenCode
 
@@ -87,9 +89,9 @@ Agrega el servidor a tu configuración global `~/.config/opencode/opencode.json`
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "devops-mcp-adapter": {
+    "azure-devops-server-mcp": {
       "type": "local",
-      "command": ["npx", "-y", "github:dsquintero/devops-mcp-adapter"],
+      "command": ["npx", "-y", "github:dsquintero/azure-devops-server-mcp"],
       "enabled": true,
       "timeout": 20000,
       "environment": {
@@ -143,7 +145,7 @@ Perfiles sugeridos:
 | `[HTTP 403]` | Al PAT le falta un permiso, o no tienes acceso a ese proyecto |
 | `Network error (UNABLE_TO_VERIFY_LEAF_SIGNATURE / SELF_SIGNED_CERT…)` | Define `NODE_EXTRA_CA_CERTS` con la CA corporativa |
 | `Network error (ENOTFOUND / ECONNREFUSED / ETIMEDOUT)` | Revisa la URL y que estés conectado a la VPN |
-| OpenCode marca el servidor como fallido al primer arranque | Aumenta `timeout`, o ejecuta una vez `npx -y github:dsquintero/devops-mcp-adapter` en una terminal para dejarlo en caché (detenlo con Ctrl+C) |
+| OpenCode marca el servidor como fallido al primer arranque | Aumenta `timeout`, o ejecuta una vez `npx -y github:dsquintero/azure-devops-server-mcp` en una terminal para dejarlo en caché (detenlo con Ctrl+C) |
 | `TF401320: Rule Error for field …` al crear o actualizar | Una regla del proceso exige ese campo. El error lista todos los campos que faltan; usa `get_type` (ver `requiredOnCreate`) o `validateOnly` para comprobarlo antes de guardar |
 
 ---
@@ -225,6 +227,8 @@ Tipos de link: `child`, `parent`, `related`, `duplicate`, `duplicate of`, `succe
 
 ## ⬆️ Migración desde 1.x
 
+El repositorio se llamaba `devops-mcp-adapter`. Actualiza tu configuración para usar `github:dsquintero/azure-devops-server-mcp` (GitHub redirige el nombre anterior, pero esa redirección puede dejar de funcionar si alguna vez se reutiliza el nombre viejo).
+
 Los nombres de las herramientas cambiaron al diseño basado en acciones:
 
 | 1.x | 2.x |
@@ -247,6 +251,6 @@ npm install
 npm test
 ```
 
-Para probar una copia local en Claude Code u OpenCode, reemplaza el comando `npx` por `node /ruta/absoluta/a/devops-mcp-adapter/index.js`.
+Para probar una copia local en Claude Code u OpenCode, reemplaza el comando `npx` por `node /ruta/absoluta/a/azure-devops-server-mcp/index.js`.
 
 Las pruebas levantan el servidor MCP real por stdio contra un Azure DevOps Server simulado y verifican URLs, versiones de la API y el contenido de las peticiones.

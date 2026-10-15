@@ -21,11 +21,11 @@ async function main() {
   try {
     config = loadConfig();
   } catch (error) {
-    console.error(`[devops-mcp-adapter] ${error.message}`);
+    console.error(`[azure-devops-server-mcp] ${error.message}`);
     process.exit(1);
   }
 
-  const server = new McpServer({ name: "devops-mcp-adapter", version });
+  const server = new McpServer({ name: "azure-devops-server-mcp", version });
   const ctx = { server, config, client: new DevOpsClient(config) };
 
   // core is always enabled: the other domains rely on it to discover projects and teams.
@@ -35,11 +35,11 @@ async function main() {
 
   await server.connect(new StdioServerTransport());
   console.error(
-    `[devops-mcp-adapter] v${version} connected to ${config.orgUrl} (api ${config.apiVersion || "auto"}, domains: ${[...new Set(["core", ...config.domains])].join(", ")}${config.readOnly ? ", read-only" : ""})`
+    `[azure-devops-server-mcp] v${version} connected to ${config.orgUrl} (api ${config.apiVersion || "auto"}, domains: ${[...new Set(["core", ...config.domains])].join(", ")}${config.readOnly ? ", read-only" : ""})`
   );
 }
 
 main().catch((error) => {
-  console.error("[devops-mcp-adapter] Fatal error:", error);
+  console.error("[azure-devops-server-mcp] Fatal error:", error);
   process.exit(1);
 });
