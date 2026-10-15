@@ -225,6 +225,102 @@ Tipos de link: `child`, `parent`, `related`, `duplicate`, `duplicate of`, `succe
 
 ---
 
+## 🤝 Usarlo junto al MCP oficial
+
+Si tu equipo tiene los work items en un Azure DevOps Server propio y los repositorios en Azure DevOps en la nube, puedes usar los dos servidores a la vez:
+
+| Servidor | Dominios | Para qué |
+| --- | --- | --- |
+| `azdo-onprem` (este) | todos (por defecto) | Work items, sprints, capacidad y Test Plans del servidor propio |
+| `azdo-cloud` ([`@azure-devops/mcp`](https://github.com/microsoft/azure-devops-mcp), oficial) | `core repositories pipelines` (opcional `wiki`) | Repositorios, pull requests, ramas y builds en la nube |
+
+**Carga del oficial solo lo que este no cubre.** Este servidor usa los mismos nombres de herramientas que el oficial (`wit_work_item`, `wit_query`, `testplan`, `work`…). Los clientes los distinguen por el nombre del servidor (`mcp__azdo-onprem__wit_work_item` frente a `mcp__azdo-cloud__wit_work_item`), pero si cargas ambos completos la IA puede elegir el equivocado y, por ejemplo, crear una tarea en la nube. Con `-d core repositories pipelines` el oficial solo expone repos y pipelines, y el único dominio repetido es `core`.
+
+### PAT de la nube para el servidor oficial
+
+El oficial acepta un PAT con `-a pat`, pero la variable `PERSONAL_ACCESS_TOKEN` debe contener el **base64 de `email:pat`** (el email puede ser cualquiera). Usa un PAT creado en la organización de la nube, con permisos de Code y Build:
+
+```bash
+# macOS / Linux
+export ADO_CLOUD_PAT_B64="$(printf '%s' 'tu-email@empresa.com:tu-pat-de-la-nube' | base64)"
+```
+
+```powershell
+# Windows (PowerShell)
+setx ADO_CLOUD_PAT_B64 ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("tu-email@empresa.com:tu-pat-de-la-nube")))
+```
+
+### Claude Code
+
+```bash
+claude mcp add --env AZURE_DEVOPS_ORG_URL=https://your-devops-server.com/CollectionName --env AZURE_DEVOPS_PAT=$AZURE_DEVOPS_PAT --scope user --transport stdio azdo-onprem -- npx -y github:dsquintero/azure-devops-server-mcp
+```
+
+```bash
+claude mcp add --env PERSONAL_ACCESS_TOKEN=$ADO_CLOUD_PAT_B64 --scope user --transport stdio azdo-cloud -- npx -y @azure-devops/mcp TU_ORG_CLOUD -a pat -d core repositories pipelines
+```
+
+O en un `.mcp.json` compartido:
+
+```json
+{
+  "mcpServers": {
+    "azdo-onprem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "github:dsquintero/azure-devops-server-mcp"],
+      "env": {
+        "AZURE_DEVOPS_ORG_URL": "https://your-devops-server.com/CollectionName",
+        "AZURE_DEVOPS_PAT": "${AZURE_DEVOPS_PAT}"
+      }
+    },
+    "azdo-cloud": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@azure-devops/mcp", "TU_ORG_CLOUD", "-a", "pat", "-d", "core", "repositories", "pipelines"],
+      "env": { "PERSONAL_ACCESS_TOKEN": "${ADO_CLOUD_PAT_B64}" }
+    }
+  }
+}
+```
+
+### OpenCode
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "azdo-onprem": {
+      "type": "local",
+      "command": ["npx", "-y", "github:dsquintero/azure-devops-server-mcp"],
+      "enabled": true,
+      "timeout": 20000,
+      "environment": {
+        "AZURE_DEVOPS_ORG_URL": "https://your-devops-server.com/CollectionName",
+        "AZURE_DEVOPS_PAT": "{env:AZURE_DEVOPS_PAT}"
+      }
+    },
+    "azdo-cloud": {
+      "type": "local",
+      "command": ["npx", "-y", "@azure-devops/mcp", "TU_ORG_CLOUD", "-a", "pat", "-d", "core", "repositories", "pipelines"],
+      "enabled": true,
+      "timeout": 20000,
+      "environment": { "PERSONAL_ACCESS_TOKEN": "{env:ADO_CLOUD_PAT_B64}" }
+    }
+  }
+}
+```
+
+`TU_ORG_CLOUD` es solo el nombre de la organización (la parte después de `dev.azure.com/`).
+
+### Limitaciones entre la nube y el servidor propio
+
+- **No hay links nativos entre un pull request de la nube y un work item del servidor propio.** Son instancias distintas, así que `link_to_pull_request` del oficial y las menciones `AB#123` en commits no funcionan. Usa `wit_link_write` con `linkType: "hyperlink"` y la URL del PR. La IA puede hacerlo en un solo flujo: *"crea el PR de la rama feature/login y agrega el enlace en la HU 4521"*.
+- **Las identidades son distintas:** en el servidor propio suelen ser cuentas de dominio (`DOMINIO\usuario`) y en la nube correos de Entra ID. Cada servidor usa su propio formato al asignar personas.
+- **Pide las cosas indicando dónde están** cuando haya ambigüedad: *"en el servidor propio"* o *"en el repo de la nube"*.
+
+---
+
 ## ⬆️ Migración desde 1.x
 
 El repositorio se llamaba `devops-mcp-adapter`. Actualiza tu configuración para usar `github:dsquintero/azure-devops-server-mcp` (GitHub redirige el nombre anterior, pero esa redirección puede dejar de funcionar si alguna vez se reutiliza el nombre viejo).
